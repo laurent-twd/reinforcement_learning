@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "poetry"
+version = "0.0.0"
+description = "Reinforcement Learning"
+authors = [
+    "Laurent Thanwerdas <laurent.thanwerdas@gmail.com>",
+]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4.0.0"
+torch = "^1.11.0"
+universal-pathlib = "^0.0.18"
+numpy = "^1.22.4"
