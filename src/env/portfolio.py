@@ -37,8 +37,8 @@ class Portfolio(Environment):
         _, current_price, next_price = self.dataset[self.current_step]
         y = next_price / current_price
         y = torch.cat([torch.Tensor([1.0]), y], dim=0)
-        w = action * y / (action.dot(y))  # used to compute transaction costs
-        mu = self.transaction_cost.get_transaction_factor(action, w)
+        weights = action * y / (action.dot(y))  # used to compute transaction costs
+        mu = self.transaction_cost.get_transaction_factor(action, weights)
         return (action * y).sum().mul(mu).log() - 1.0
 
     def step(self, action: TradingAction) -> Tuple[float, TradingState, bool]:

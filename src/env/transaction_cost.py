@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+import torch
 
 
 @dataclass
@@ -21,5 +22,11 @@ class DynamicTransactionCost(TransactionCost):
     def __init__(self, config):
         super().__init__(config)
 
-    def get_transaction_factor(self, weights, new_weights):
-        return 1.0
+    def get_transaction_factor(self, action, weights, steps=10):
+        c_b, c_s = self.config.c_b, self.config.c_s
+        mu = 1.0 - 0.5 * (c_b + c_s)
+        for _ in range(steps):
+            x = torch.relu(weights[1:] - mu * action[1:]).sum()
+            x = 1.0 - c_b * weights[0] - (c_b + c_s - c_b * c_s) * x
+            mu = x / (1.0 - c_b * action[0])
+        return mu
