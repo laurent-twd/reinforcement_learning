@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 import numpy as np
 import torch
 
@@ -8,7 +9,7 @@ class BatchInput:
     state: torch.Tensor
     action: torch.Tensor
     reward: torch.Tensor
-    next_state: torch.Tensor
+    next_state: Optional[torch.Tensor]
     terminal_state: torch.Tensor
 
     @property
@@ -17,11 +18,11 @@ class BatchInput:
 
     def to(self, device: torch.device):
         return BatchInput(
-            self.state.to(device) if self.state is not None else None,
-            self.action.to(device) if self.action is not None else None,
-            self.reward.to(device) if self.reward is not None else None,
+            self.state.to(device),
+            self.action.to(device),
+            self.reward.to(device),
             self.next_state.to(device) if self.next_state is not None else None,
-            self.terminal_state.to(device) if self.terminal_state is not None else None,
+            self.terminal_state.to(device),
         )
 
 
@@ -45,7 +46,15 @@ class ReplayBuffer:
             state, action, reward, next_state, terminal_state = list(
                 map(
                     lambda k: torch.cat(
-                        [self.buffer[k][i].unsqueeze(0) for i in idx], dim=0
+                        [
+                            self.buffer[k][i].unsqueeze(0)
+                            if self.buffer[k][i] is not None
+                            else self.buffer["state"][i].unsqueeze(
+                                0
+                            )  # terminal state does not exists
+                            for i in idx
+                        ],
+                        dim=0,
                     ),
                     self.buffer.keys(),
                 )
@@ -63,7 +72,7 @@ class ReplayBuffer:
         state: torch.Tensor,
         action: torch.Tensor,
         reward: torch.Tensor,
-        next_state: torch.Tensor,
+        next_state: Optional[torch.Tensor],
         terminal_state: torch.Tensor,
     ):
         if self.buffer_size() >= self.memory_size:
@@ -74,7 +83,9 @@ class ReplayBuffer:
         self.buffer["state"].append(state.squeeze())
         self.buffer["action"].append(action.squeeze())
         self.buffer["reward"].append(reward.squeeze())
-        self.buffer["next_state"].append(next_state.squeeze())
+        self.buffer["next_state"].append(
+            next_state.squeeze() if next_state is not None else None
+        )
         self.buffer["terminal_state"].append(terminal_state.squeeze())
 
         assert self.buffer_size() <= self.memory_size
