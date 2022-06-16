@@ -1,7 +1,5 @@
 import torch
 from torch.utils.data import Dataset
-
-# import pandas as pd
 from typing import List, Tuple
 import numpy as np
 
@@ -17,6 +15,7 @@ class TradingLabel(torch.Tensor):
 def preprocess(
     df: np.ndarray, n_assets: int, n_channels: int, window: int
 ) -> Tuple[TradingState, TradingLabel, TradingLabel]:
+
     assert df.shape[-1] == n_assets * n_channels
     closing_index = [n_channels * k + (n_channels - 1) for k in range(n_assets)]
     prices = torch.FloatTensor(df)
