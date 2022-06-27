@@ -40,32 +40,40 @@ class ReplayBuffer:
     def buffer_size(self):
         return len(self.buffer["state"])
 
+    def collate(self, idx):
+        state, action, reward, next_state, terminal_state = list(
+            map(
+                lambda k: torch.cat(
+                    [
+                        self.buffer[k][i].unsqueeze(0)
+                        if self.buffer[k][i] is not None
+                        else self.buffer["state"][i].unsqueeze(
+                            0
+                        )  # terminal state does not exists
+                        for i in idx
+                    ],
+                    dim=0,
+                ),
+                self.buffer.keys(),
+            )
+        )
+
+        return BatchInput(
+            state=state,
+            action=action,
+            reward=reward,
+            next_state=next_state,
+            terminal_state=terminal_state,
+        )
+
+    def get_all(self):
+        idx = np.arange(0, self.buffer_size())
+        return self.collate(idx)
+
     def get_batch(self, batch_size: int):
         if self.buffer_size() >= batch_size:
             idx = np.random.choice(self.buffer_size(), size=batch_size, replace=False)
-            state, action, reward, next_state, terminal_state = list(
-                map(
-                    lambda k: torch.cat(
-                        [
-                            self.buffer[k][i].unsqueeze(0)
-                            if self.buffer[k][i] is not None
-                            else self.buffer["state"][i].unsqueeze(
-                                0
-                            )  # terminal state does not exists
-                            for i in idx
-                        ],
-                        dim=0,
-                    ),
-                    self.buffer.keys(),
-                )
-            )
-            return BatchInput(
-                state=state,
-                action=action,
-                reward=reward,
-                next_state=next_state,
-                terminal_state=terminal_state,
-            )
+            return self.collate(idx)
 
     def add_experience(
         self,

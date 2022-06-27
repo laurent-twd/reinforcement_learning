@@ -1,11 +1,12 @@
 import numpy as np
 from src.data.trading_dataset import TradingDataset
 from src.models.agent import AgentConfig, TradingAgent
-from src.env.portfolio import Portfolio
+from env.single_portfolio import Portfolio
 from src.data.replay_buffer import ReplayBuffer
 import random
 from dataclasses import astuple
 from src.env.transaction_cost import TransactionCostConfig, DynamicTransactionCost
+import torch
 
 n_assets = 5
 T = 10000
@@ -25,9 +26,10 @@ env = Portfolio(
 )
 buffer = ReplayBuffer(1000)
 batch_size = 16
+n_episodes = 10
 
 counter = 0
-for episode in range(10):
+for episode in range(n_episodes):
     print(episode)
     terminal_state = False
     while not terminal_state:
