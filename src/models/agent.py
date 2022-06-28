@@ -25,7 +25,7 @@ class TradingAgent(Agent):
             return self.network(state)
         else:
             logits = torch.distributions.Normal(0.0, 1.0).sample(
-                [state.shape[0], 1 + self.config.n_assets]
+                [state.shape[0], 2 * (1 + self.config.n_assets)]
             )
             return torch.softmax(logits, dim=-1)
 
