@@ -14,7 +14,7 @@ class TradingLabel(torch.Tensor):
 
 def preprocess(
     df: np.ndarray, n_assets: int, n_channels: int, window: int
-) -> Tuple[TradingState, TradingLabel, TradingLabel]:
+) -> Tuple[torch.Tensor]:
 
     assert df.shape[-1] == n_assets * n_channels
     closing_index = [n_channels * k + (n_channels - 1) for k in range(n_assets)]
@@ -29,7 +29,7 @@ def preprocess(
         features[:-1, -1, closing_index],
         features[1:, -1, closing_index],
     )
-    return TradingState(inputs), TradingLabel(labels[0]), TradingLabel(labels[1])
+    return inputs, labels[0], labels[1]
 
 
 class TradingDataset(Dataset):
@@ -43,5 +43,5 @@ class TradingDataset(Dataset):
     def __len__(self):
         return len(self.data[0])
 
-    def __getitem__(self, idx: int) -> Tuple[TradingState, TradingLabel, TradingLabel]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor]:
         return self.data[0][idx], self.data[1][idx], self.data[2][idx]
