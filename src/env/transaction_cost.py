@@ -5,8 +5,8 @@ import torch
 
 @dataclass
 class TransactionCostConfig:
-    c_s = 0.05
-    c_b = 0.05
+    c_s: float = 0.05
+    c_b: float = 0.05
 
 
 class TransactionCost(ABC):

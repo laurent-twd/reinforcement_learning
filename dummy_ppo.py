@@ -1,18 +1,10 @@
-from sqlite3 import paramstyle
-import numpy as np
 from src.data.trading_dataset import TradingDataset
 from src.models.agent import AgentConfig, TradingAgent, TradingCritic
-from src.env.portfolio import Portfolio
-from src.data.replay_buffer import ReplayBuffer
-import random
 from dataclasses import astuple
 from src.env.transaction_cost import (
-    TransactionCost,
     TransactionCostConfig,
     DynamicTransactionCost,
 )
-import torch
-from copy import deepcopy
 from src.models.ppo import PPOConfig, PPO
 from src.models.networks import RecurrentNetwork
 import pandas as pd
@@ -34,7 +26,7 @@ steps_per_episode = 500
 dataset = TradingDataset(
     df=prices, n_assets=n_assets, n_channels=C, window=30, norm=norm
 )
-cost = DynamicTransactionCost(TransactionCostConfig())
+cost = DynamicTransactionCost(TransactionCostConfig(c_b=0.05, c_s=0.05))
 
 agent = TradingAgent(
     AgentConfig(n_assets=n_assets),
@@ -47,9 +39,39 @@ critic = TradingCritic(
 )
 
 ppo = PPO(
-    config=PPOConfig(lr=1e-3, lambda_=1.0),
+    config=PPOConfig(lr=1e-2, lambda_=1.0),
     agent=agent,
     critic=critic,
     transaction_cost=cost,
 )
-ppo.fit(dataset, n_episodes=1000)
+batch_size = 16
+self = ppo
+ppo.fit(dataset, n_episodes=50)
+
+from src.env.portfolio import Portfolio
+from src.data.replay_buffer import ReplayBuffer
+import torch
+
+env = Portfolio(
+    dataset=dataset,
+    transaction_cost=ppo.transaction_cost,
+    steps_per_episode=steps_per_episode,
+    name="portfolio",
+)
+
+starting_step = torch.randint(0, len(dataset) - steps_per_episode, [1])
+env.reset(starting_step)
+buffer = ReplayBuffer(steps_per_episode)
+rewards, values, ratios = ppo.run_episode(env, starting_step, buffer)
+
+portfolio_value = rewards.add(1.0).exp().prod()
+_, l0, l1 = dataset[starting_step + torch.arange(0, rewards.shape[0])]
+call = (l1 / l0).prod()
+portfolio_value, call
+
+weights = buffer.get_all().action
+action = weights.diff(dim=0)[:, -1] > 0
+labels = (l1 - l0 > 0)[1:, 0]
+assert labels.shape == action.shape
+
+print(f"Edge: {(action == labels).float().mean()}")

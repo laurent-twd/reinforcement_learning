@@ -1,7 +1,7 @@
 from src.env.env import Environment
 from typing import Optional, Tuple
 import torch
-from src.data.trading_dataset import TradingState, TradingDataset
+from src.data.trading_dataset import TradingDataset
 from src.env.transaction_cost import TransactionCost
 
 
@@ -28,11 +28,19 @@ class Portfolio(Environment):
     def reset(self, step: torch.Tensor):
         self.current_step = step.long()
         self.counter = 0
+        self.weights = (
+            torch.ones((self.current_step.shape[0], 1 + self.n_assets)).cumsum(dim=-1)
+            <= 1.0
+        ).float()
 
-    def get_current_state(self) -> TradingState:
+    def get_current_state(self) -> torch.Tensor:
         return self.dataset[self.current_step][0]
 
-    def reward(self, action: TradingAction, reduce_reward: bool = True) -> float:
+    def reward(
+        self,
+        action: torch.Tensor,
+        reduce_reward: bool = True,
+    ) -> float:
         _, current_price, next_price = self.dataset[self.current_step]
         y = next_price / current_price
         if len(y.shape) < 2:
@@ -41,10 +49,11 @@ class Portfolio(Environment):
             action = action.unsqueeze(0)
         cash_return = torch.ones(size=(y.shape[0], 1))
         y = torch.cat([cash_return, y], dim=-1)
-        weights = (
+        # with torch.no_grad():
+        mu = self.transaction_cost.get_transaction_factor(action, self.weights)
+        self.weights = (
             action * y / (action * y).sum(dim=-1, keepdim=True)
         )  # used to compute transaction costs
-        mu = self.transaction_cost.get_transaction_factor(action, weights)
         r = (action * y).sum(dim=-1).mul(mu).log() - 1.0
         if reduce_reward:
             return r.mean(dim=0)
@@ -52,8 +61,8 @@ class Portfolio(Environment):
             return r
 
     def step(
-        self, action: TradingAction, reduce_reward: bool = False
-    ) -> Tuple[float, TradingState, bool]:
+        self, action: torch.Tensor, reduce_reward: bool = False
+    ) -> Tuple[float, torch.Tensor, bool]:
 
         current_state = self.get_current_state()
         reward = self.reward(action, reduce_reward)
