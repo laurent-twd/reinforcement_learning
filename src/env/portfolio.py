@@ -50,11 +50,11 @@ class Portfolio(Environment):
         cash_return = torch.ones(size=(y.shape[0], 1))
         y = torch.cat([cash_return, y], dim=-1)
         # with torch.no_grad():
-        mu = self.transaction_cost.get_transaction_factor(action, self.weights)
+        mu = 1.0  # self.transaction_cost.get_transaction_factor(action, self.weights)
         self.weights = (
             action * y / (action * y).sum(dim=-1, keepdim=True)
         )  # used to compute transaction costs
-        r = (action * y).sum(dim=-1).mul(mu).log() - 1.0
+        r = (action * y).sum(dim=-1).mul(mu).log()
         if reduce_reward:
             return r.mean(dim=0)
         else:
