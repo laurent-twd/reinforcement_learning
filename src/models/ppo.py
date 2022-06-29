@@ -12,13 +12,30 @@ from tqdm import tqdm
 
 def clipped_loss(rewards, values, ratios, gamma, lambda_, epsilon):
     delta = rewards[:, :-1] + gamma * values[:, 1:] - values[:, :-1]
-    powers = torch.arange(0, delta.shape[1])
-    advantage = torch.pow((gamma * lambda_), powers).unsqueeze(0) * delta
-    g = torch.where(
+    mask = torch.triu(torch.ones((delta.shape[-1], delta.shape[-1]))).unsqueeze(0)
+    discounting = torch.pow(gamma * lambda_, mask.cumsum(-1) - 1.0) * mask
+    adjustment_factor = 1.0 - torch.pow(lambda_, mask.sum(-1))
+    adjustment_factor = adjustment_factor.unsqueeze(1) * mask
+    if lambda_ == 1.0:
+        advantage = (discounting * delta.unsqueeze(-1)).sum(-1)
+    else:
+        advantage = (adjustment_factor * discounting * delta.unsqueeze(-1)).sum(-1)
+
+    # Actor Loss
+    p1 = ratios[:, :-1] * advantage
+    p2 = torch.where(
         advantage >= 0, (1.0 + epsilon) * advantage, (1.0 - epsilon) * advantage
     )
-    loss = torch.minimum(ratios[:, :-1] * advantage, g)
-    return -loss.mean()
+    actor_loss = torch.minimum(p1, p2)
+
+    # Critic Loss
+    mask = torch.triu(torch.ones((rewards.shape[-1], rewards.shape[-1]))).unsqueeze(0)
+    forward_rewards = rewards.unsqueeze(-1) * mask
+    discounting = torch.pow(gamma, mask.cumsum(-1) - 1.0) * mask
+    target_values = (forward_rewards * discounting).sum(-1)
+    critic_loss = (values - target_values).square().mean()
+
+    return -(actor_loss.mean() - critic_loss)
 
 
 @dataclass
