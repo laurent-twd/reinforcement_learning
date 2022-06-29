@@ -10,6 +10,7 @@ class RecurrentNetwork(torch.nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
+        self.n_layers = n_layers
         self.layers = torch.nn.ModuleList()
         for i in range(n_layers):
             if i == 0:
@@ -23,8 +24,11 @@ class RecurrentNetwork(torch.nn.Module):
     def __call__(self, x):
 
         y = x.transpose(dim0=1, dim1=0)
-        for layer in self.layers:
-            _, y = layer(y)
+        for i, layer in enumerate(self.layers):
+            if i < self.n_layers - 1:
+                y, _ = layer(y)
+            else:
+                _, y = layer(y)
         output = self.output_layer(y).transpose(dim0=1, dim1=0)
 
         if self.output_size == 1:
