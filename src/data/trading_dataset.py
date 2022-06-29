@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import numpy as np
 
 
@@ -13,7 +13,11 @@ class TradingLabel(torch.Tensor):
 
 
 def preprocess(
-    df: np.ndarray, n_assets: int, n_channels: int, window: int
+    df: np.ndarray,
+    n_assets: int,
+    n_channels: int,
+    window: int,
+    norm: Optional[np.ndarray] = None,
 ) -> Tuple[torch.Tensor]:
 
     assert df.shape[-1] == n_assets * n_channels
@@ -29,15 +33,22 @@ def preprocess(
         features[:-1, -1, closing_index],
         features[1:, -1, closing_index],
     )
+    if norm is not None:
+        inputs = inputs / torch.FloatTensor(norm)[index][:-1, :].unsqueeze(-1)
     return inputs, labels[0], labels[1]
 
 
 class TradingDataset(Dataset):
     def __init__(
-        self, df: np.ndarray, n_assets: int, n_channels: int, window: int = 30
+        self,
+        df: np.ndarray,
+        n_assets: int,
+        n_channels: int,
+        window: int,
+        norm: np.ndarray,
     ):
         self.data = preprocess(
-            df, n_assets=n_assets, n_channels=n_channels, window=window
+            df, n_assets=n_assets, n_channels=n_channels, window=window, norm=norm
         )
 
     def __len__(self):
