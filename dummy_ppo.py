@@ -15,15 +15,25 @@ import torch
 from copy import deepcopy
 from src.models.ppo import PPOConfig, PPO
 from src.models.networks import RecurrentNetwork
+import pandas as pd
 
-n_assets = 5
-T = 10000
+
+M = 365 * 2 * (60 * 24)
+path_to_data = "/Users/laurentthanwerdas/Downloads/bitstampUSD_1-min_data_2012-01-01_to_2021-03-31.csv"
+df = pd.read_csv(path_to_data).tail(M)
+columns = ["High", "Low", "Close", "Open"]
+df = df.dropna(subset=columns)
+norm = df["Open"].values
+prices = df[["High", "Low", "Close"]].values
+
+n_assets = 1
 C = 3
-X = np.random.normal(100.0, 1.0, size=(T, n_assets * C))
 window = 30
 steps_per_episode = 500
 
-dataset = TradingDataset(X, n_assets, C, 30)
+dataset = TradingDataset(
+    df=prices, n_assets=n_assets, n_channels=C, window=30, norm=norm
+)
 cost = DynamicTransactionCost(TransactionCostConfig())
 
 agent = TradingAgent(
@@ -36,9 +46,10 @@ critic = TradingCritic(
     network=RecurrentNetwork(n_assets * C, 32, 1, 2),
 )
 
-ppo = PPO(config=PPOConfig(lr=1e-5), agent=agent, critic=critic, transaction_cost=cost)
-ppo.fit(dataset, n_episodes=100)
-
-batch_size = 16
-steps_per_episode = 500
-self = ppo
+ppo = PPO(
+    config=PPOConfig(lr=1e-3, lambda_=1.0),
+    agent=agent,
+    critic=critic,
+    transaction_cost=cost,
+)
+ppo.fit(dataset, n_episodes=1000)
