@@ -10,7 +10,7 @@ from typing import Union
 from tqdm import tqdm
 
 
-def clipped_loss(rewards, values, ratios, gamma, lambda_, epsilon):
+def clipped_loss(rewards, values, ratios, gamma, lambda_, epsilon, c_1):
     delta = rewards[:, :-1] + gamma * values[:, 1:] - values[:, :-1]
     mask = torch.triu(torch.ones((delta.shape[-1], delta.shape[-1]))).unsqueeze(0)
     discounting = torch.pow(gamma * lambda_, mask.cumsum(-1) - 1.0) * mask
@@ -20,22 +20,19 @@ def clipped_loss(rewards, values, ratios, gamma, lambda_, epsilon):
         advantage = (discounting * delta.unsqueeze(-1)).sum(-1)
     else:
         advantage = (adjustment_factor * discounting * delta.unsqueeze(-1)).sum(-1)
-
     # Actor Loss
     p1 = ratios[:, :-1] * advantage
     p2 = torch.where(
         advantage >= 0, (1.0 + epsilon) * advantage, (1.0 - epsilon) * advantage
     )
     actor_loss = torch.minimum(p1, p2)
-
     # Critic Loss
     mask = torch.triu(torch.ones((rewards.shape[-1], rewards.shape[-1]))).unsqueeze(0)
     forward_rewards = rewards.unsqueeze(-1) * mask
     discounting = torch.pow(gamma, mask.cumsum(-1) - 1.0) * mask
     target_values = (forward_rewards * discounting).sum(-1)
     critic_loss = (values - target_values).square().mean()
-
-    return -(actor_loss.mean() - critic_loss)
+    return -(actor_loss.mean() - c_1 * critic_loss)
 
 
 @dataclass
@@ -45,6 +42,7 @@ class PPOConfig:
     lambda_: float = 0.5
     epsilon: float = 0.2
     steps_per_episode: float = 500
+    c_1: float = 1e-2
 
 
 class PPO:
@@ -92,21 +90,16 @@ class PPO:
             inputs = state  # .reshape(state.shape[0], -1)
             with torch.no_grad():
                 values.append(self.old_critic(inputs))
-                old_parameters = self.old_agent(inputs)
-                old_mean, old_logvar = torch.split(
-                    old_parameters, old_parameters.shape[-1] // 2, dim=-1
+                old_log_alphas = self.old_agent(inputs)
+                old_policy = torch.distributions.Dirichlet(
+                    concentration=old_log_alphas.exp()
                 )
-                old_policy = torch.distributions.Normal(
-                    old_mean, old_logvar.mul(0.5).exp()
-                )
-                action = old_policy.sample().softmax(-1)
-            parameters = self.agent(inputs)
-            mean, logvar = torch.split(parameters, parameters.shape[-1] // 2, dim=-1)
-            policy = torch.distributions.Normal(mean, logvar.mul(0.5).exp())
+                action = old_policy.sample()
+            log_alphas = self.agent(inputs)
+            policy = torch.distributions.Dirichlet(concentration=log_alphas.exp())
             ratio = (
                 (policy.log_prob(action) - old_policy.log_prob(action))
                 .exp()
-                .prod(dim=-1)
                 .unsqueeze(-1)
             )
             ratios.append(ratio)
@@ -152,6 +145,7 @@ class PPO:
                 self.config.gamma,
                 self.config.lambda_,
                 self.config.epsilon,
+                self.config.c_1,
             )
 
             loss.backward()
