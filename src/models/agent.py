@@ -5,6 +5,17 @@ from pathlib import Path
 from upath import UPath
 
 
+def initialize(model):
+    def init(x):
+        try:
+            return torch.nn.init.xavier_uniform(x)
+        except:
+            return torch.nn.init.zeros_(x)
+
+    _ = [init(x) for x in model.network.parameters()]
+    return model
+
+
 @dataclass
 class AgentConfig:
     n_assets: int = 10
