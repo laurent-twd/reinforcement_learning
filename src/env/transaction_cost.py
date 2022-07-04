@@ -31,3 +31,12 @@ class DynamicTransactionCost(TransactionCost):
             x = 1.0 - c_b * weights[:, 0] - (c_b + c_s - c_b * c_s) * x
             mu = x / (1.0 - c_b * action[:, 0])
         return mu
+
+
+class ConstantTransactionCost(TransactionCost):
+    def __init__(self, config):
+        super().__init__(config)
+
+    def get_transaction_factor(self, action, weights, steps=10):
+        c_b, c_s = self.config.c_b, self.config.c_s
+        return 1.0 - 0.5 * (c_b + c_s)

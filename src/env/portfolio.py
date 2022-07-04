@@ -49,8 +49,7 @@ class Portfolio(Environment):
             action = action.unsqueeze(0)
         cash_return = torch.ones(size=(y.shape[0], 1))
         y = torch.cat([cash_return, y], dim=-1)
-        # with torch.no_grad():
-        mu = 1.0  # self.transaction_cost.get_transaction_factor(action, self.weights)
+        mu = self.transaction_cost.get_transaction_factor(action, self.weights)
         self.weights = (
             action * y / (action * y).sum(dim=-1, keepdim=True)
         )  # used to compute transaction costs
@@ -67,7 +66,7 @@ class Portfolio(Environment):
         current_state = self.get_current_state()
         reward = self.reward(action, reduce_reward)
         terminal_state = (self.current_step + 1 >= len(self.dataset)) | (
-            self.counter >= (self.steps_per_episode - 1)
+            self.counter >= (self.steps_per_episode)  # do not add -1 for now
         )
         self.current_step = torch.clip(self.current_step + 1, max=len(self.dataset) - 1)
         self.counter += 1
