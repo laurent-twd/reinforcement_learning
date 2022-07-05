@@ -82,10 +82,16 @@ class PPO:
         return torch.cat(log_probs, dim=1), torch.cat(values, dim=1).squeeze()
 
     def fit(
-        self,
-        dataset: TradingDataset,
-        n_episodes: int = 1000,
+        self, dataset: TradingDataset, n_episodes: int = 1000, use_gpu: bool = True
     ):
+
+        self.actor.network.train()
+        self.critic.network.train()
+        use_gpu = use_gpu and torch.cuda.is_available()
+        device = "cuda" if use_gpu else "cpu"
+        self.actor.network.to(device)
+        self.critic.network.to(device)
+
         env = Portfolio(
             dataset=dataset,
             transaction_cost=self.transaction_cost,
@@ -94,7 +100,7 @@ class PPO:
         )
 
         progbar = tqdm(range(n_episodes), desc="Episode ")
-        for episode in progbar:
+        for _ in progbar:
             starting_step = torch.randint(
                 0,
                 len(dataset) - self.config.steps_per_trajectory,
@@ -102,7 +108,6 @@ class PPO:
             )
             env.reset(starting_step)
             self.buffer.reset()
-            self.optimizer.zero_grad()
             old_log_probs, old_values = self.run_episode(env)
             dataloader = DataLoader(
                 dataset=self.buffer,
@@ -113,13 +118,16 @@ class PPO:
 
             for epoch in range(self.config.n_epochs):
                 for idx, batch in iter(dataloader):
+                    batch.to(device)
                     (
                         states,
                         actions,
                         rewards,
-                        next_states,
-                        terminal_state,
+                        _,
+                        _,
                     ) = astuple(batch)
+
+                    self.optimizer.zero_grad()
 
                     log_alphas = self.actor(states.flatten(0, 1)).reshape(
                         states.shape[0], states.shape[1], -1
@@ -162,5 +170,11 @@ class PPO:
                     value_loss = value_loss.mean()
 
                     loss = actor_loss + value_loss + entropy_loss
+                    loss.backward()
+                    self.optimizer.step()
 
-                    self.writer.add_scalar("Loss", loss.detach().cpu())
+                    step = self.optimizer.state[
+                        self.optimizer.param_groups[0]["params"][-1]
+                    ]["step"]
+                    self.writer.add_scalar("Loss", loss.detach().cpu(), step)
+                    progbar.set_description(f"Loss: {loss.detach().cpu():e}")
