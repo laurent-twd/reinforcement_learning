@@ -7,7 +7,7 @@ from src.env.transaction_cost import DynamicTransactionCost
 from typing import Union
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from src.models.ppo.losses import clipped_loss, easier_loss
+from src.models.ppo.losses import GAE
 from src.models.agent import initialize
 from src.data.buffer import Buffer
 from torch.utils.data import DataLoader
@@ -103,7 +103,7 @@ class PPO:
             env.reset(starting_step)
             self.buffer.reset()
             self.optimizer.zero_grad()
-            old_log_probs, values = self.run_episode(env)
+            old_log_probs, old_values = self.run_episode(env)
             dataloader = DataLoader(
                 dataset=self.buffer,
                 batch_size=self.config.batch_size,
@@ -124,7 +124,43 @@ class PPO:
                     log_alphas = self.actor(states.flatten(0, 1)).reshape(
                         states.shape[0], states.shape[1], -1
                     )
-                    log_probs = torch.distributions.Dirichlet(
-                        log_alphas.exp()
-                    ).log_prob(actions)
+                    distribution = torch.distributions.Dirichlet(log_alphas.exp())
+                    log_probs = distribution.log_prob(actions)
                     ratios = (log_probs - old_log_probs[idx, :]).exp()
+                    advantages = GAE(
+                        rewards,
+                        old_values[idx, :],
+                        self.config.gamma,
+                        self.config.lambda_,
+                    )
+
+                    p1 = ratios * advantages
+                    p2 = (
+                        torch.clamp(
+                            ratios,
+                            1 - self.config.epsilon,
+                            1 + self.config.epsilon,
+                        )
+                        * advantages
+                    )
+                    actor_loss = -torch.minimum(p1, p2).mean()
+                    entropy_loss = -distribution.entropy().mean()
+                    with torch.no_grad():
+                        values = (
+                            self.critic(states.flatten(0, 1))
+                            .reshape(states.shape[0], states.shape[1], -1)
+                            .squeeze()
+                        )
+
+                    rewards_to_go = advantages + old_values[idx, :-1]
+                    value_pred_clipped = old_values[idx, :-1] + (
+                        values - old_values[idx, :-1]
+                    ).clamp(-self.config.epsilon, self.config.epsilon)
+                    value_losses = (values - rewards_to_go) ** 2
+                    value_losses_clipped = (value_pred_clipped - rewards_to_go) ** 2
+                    value_loss = 0.5 * torch.max(value_losses, value_losses_clipped)
+                    value_loss = value_loss.mean()
+
+                    loss = actor_loss + value_loss + entropy_loss
+
+                    self.writer.add_scalar("Loss", loss.detach().cpu())
