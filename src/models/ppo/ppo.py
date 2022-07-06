@@ -70,7 +70,7 @@ class PPO:
                 value = self.critic(state)
             policy = torch.distributions.Dirichlet(concentration=log_alphas.exp())
             action = policy.sample()
-            reward, next_state, terminal_state = env.step(action, device=device)
+            reward, next_state, terminal_state = env.step(action)
             log_prob = policy.log_prob(action)
             self.buffer.add_experience(
                 state.cpu(),
@@ -81,6 +81,8 @@ class PPO:
             )
             log_probs.append(log_prob.unsqueeze(1))
             values.append(value)
+        with torch.no_grad():
+            values.append(self.critic(next_state))
 
         return torch.cat(log_probs, dim=1), torch.cat(values, dim=1).squeeze()
 
@@ -124,14 +126,13 @@ class PPO:
 
             for epoch in range(self.config.n_epochs):
                 for idx, batch in iter(dataloader):
-                    batch.to(device)
                     (
                         states,
                         actions,
                         rewards,
                         _,
                         _,
-                    ) = astuple(batch)
+                    ) = astuple(batch.to(device))
 
                     self.optimizer.zero_grad()
 
