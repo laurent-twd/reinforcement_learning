@@ -74,7 +74,7 @@ class Portfolio(Environment):
         self.counter += 1
 
         new_state = self.get_current_state().to(device)
-        terminal_state.to(device)
+        terminal_state = terminal_state.to(device)
         new_state = torch.where(
             terminal_state.unsqueeze(-1).unsqueeze(-1), current_state, new_state
         )
