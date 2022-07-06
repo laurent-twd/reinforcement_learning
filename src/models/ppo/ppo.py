@@ -28,6 +28,7 @@ class PPOConfig:
     c_1: float = 1e-2
     c_2: float = 1e-2
     max_grad_norm: float = 0.5
+    normalize_advantage: bool = True
 
 
 class PPO:
@@ -77,7 +78,7 @@ class PPO:
             log_probs.append(log_prob.unsqueeze(1))
             values.append(value)
         with torch.no_grad():
-            values.append(self.critic(next_state))
+            values.append(self.critic(state))
 
         return torch.cat(log_probs, dim=1), torch.cat(values, dim=1).squeeze()
 
@@ -106,6 +107,9 @@ class PPO:
                 len(dataset) - self.config.steps_per_trajectory,
                 [self.config.n_trajectories],
             )
+            # starting_step = (
+            #     torch.zeros(self.config.n_trajectories).long() + starting_step[0]
+            # )
             env.reset(starting_step)
             self.buffer.reset()
             old_log_probs, old_values = self.run_episode(env)
@@ -141,7 +145,11 @@ class PPO:
                         self.config.gamma,
                         self.config.lambda_,
                     )
-
+                    rewards_to_go = advantages + old_values[idx, :-1]
+                    if self.config.normalize_advantage:
+                        advantages = (advantages - advantages.mean()) / (
+                            advantages.std() + 1e-5
+                        )
                     p1 = ratios * advantages
                     p2 = (
                         torch.clamp(
@@ -160,7 +168,6 @@ class PPO:
                             .squeeze()
                         )
 
-                    rewards_to_go = advantages + old_values[idx, :-1]
                     value_pred_clipped = old_values[idx, :-1] + (
                         values - old_values[idx, :-1]
                     ).clamp(-self.config.epsilon, self.config.epsilon)
@@ -168,13 +175,32 @@ class PPO:
                     value_losses_clipped = (value_pred_clipped - rewards_to_go) ** 2
                     value_loss = 0.5 * torch.max(value_losses, value_losses_clipped)
                     value_loss = value_loss.mean()
+                    # value_loss = (values - rewards_to_go).square().mean()
 
-                    loss = actor_loss + value_loss + entropy_loss
+                    loss = (
+                        actor_loss
+                        + self.config.c_1 * value_loss
+                        + self.config.c_2 * entropy_loss
+                    )
                     loss.backward()
+                    torch.nn.utils.clip_grad_norm_(
+                        self.actor.network.parameters(), self.config.max_grad_norm
+                    )
+                    torch.nn.utils.clip_grad_norm_(
+                        self.critic.network.parameters(), self.config.max_grad_norm
+                    )
+
                     self.optimizer.step()
 
                     step = self.optimizer.state[
                         self.optimizer.param_groups[0]["params"][-1]
                     ]["step"]
                     self.writer.add_scalar("Loss", loss.detach().cpu(), step)
+                    self.writer.add_scalar(
+                        "Actor Loss", actor_loss.detach().cpu(), step
+                    )
+                    self.writer.add_scalar(
+                        "Critic Loss", value_loss.detach().cpu(), step
+                    )
+
                     progbar.set_description(f"Loss: {loss.detach().cpu():e}")
