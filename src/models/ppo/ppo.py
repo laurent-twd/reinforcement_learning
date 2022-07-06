@@ -79,10 +79,10 @@ class PPO:
                 next_state.cpu(),
                 terminal_state.cpu(),
             )
-            log_probs.append(log_prob.unsqueeze(1))
-            values.append(value)
+            log_probs.append(log_prob.unsqueeze(1).cpu())
+            values.append(value.cpu())
         with torch.no_grad():
-            values.append(self.critic(next_state))
+            values.append(self.critic(next_state).cpu())
 
         return torch.cat(log_probs, dim=1), torch.cat(values, dim=1).squeeze()
 
@@ -139,17 +139,21 @@ class PPO:
                     log_alphas = self.actor(states.flatten(0, 1)).reshape(
                         states.shape[0], states.shape[1], -1
                     )
+
+                    batch_old_log_probs = old_log_probs[idx, :].to(device)
+                    batch_old_values = old_values[idx, :].to(device)
+
                     distribution = torch.distributions.Dirichlet(log_alphas.exp())
                     log_probs = distribution.log_prob(actions)
-                    ratios = (log_probs - old_log_probs[idx, :]).exp()
+                    ratios = (log_probs - batch_old_log_probs).exp()
                     advantages = GAE(
                         rewards,
-                        old_values[idx, :],
+                        batch_old_values,
                         self.config.gamma,
                         self.config.lambda_,
                         device,
                     )
-                    rewards_to_go = advantages + old_values[idx, :-1]
+                    rewards_to_go = advantages + batch_old_values[:, :-1]
                     if self.config.normalize_advantage:
                         advantages = (advantages - advantages.mean()) / (
                             advantages.std() + 1e-5
@@ -172,8 +176,8 @@ class PPO:
                             .squeeze()
                         )
 
-                    value_pred_clipped = old_values[idx, :-1] + (
-                        values - old_values[idx, :-1]
+                    value_pred_clipped = batch_old_values[:, :-1] + (
+                        values - batch_old_values[:, :-1]
                     ).clamp(-self.config.epsilon, self.config.epsilon)
                     value_losses = (values - rewards_to_go) ** 2
                     value_losses_clipped = (value_pred_clipped - rewards_to_go) ** 2
