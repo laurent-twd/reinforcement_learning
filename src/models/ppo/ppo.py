@@ -28,6 +28,7 @@ class PPOConfig:
     c_1: float = 1e-2
     c_2: float = 1e-2
     max_grad_norm: float = 0.5
+    accumulate_grad_batches: int = 4
     normalize_advantage: bool = True
 
 
@@ -126,7 +127,10 @@ class PPO:
 
             self.actor.network.to(device)
             self.critic.network.to(device)
-            for epoch in range(self.config.n_epochs):
+            count = 0
+            for epoch in range(
+                self.config.n_epochs * self.config.accumulate_grad_batches
+            ):
                 for idx, batch in iter(dataloader):
                     (
                         states,
@@ -135,8 +139,9 @@ class PPO:
                         _,
                         _,
                     ) = astuple(batch.to(device))
-
-                    self.optimizer.zero_grad()
+                    count += 1
+                    if count % self.config.accumulate_grad_batches == 0:
+                        self.optimizer.zero_grad()
 
                     log_alphas = self.actor(states.flatten(0, 1)).reshape(
                         states.shape[0], states.shape[1], -1
