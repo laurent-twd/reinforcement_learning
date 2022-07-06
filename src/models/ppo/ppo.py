@@ -147,6 +147,7 @@ class PPO:
                         old_values[idx, :],
                         self.config.gamma,
                         self.config.lambda_,
+                        device,
                     )
                     rewards_to_go = advantages + old_values[idx, :-1]
                     if self.config.normalize_advantage:
