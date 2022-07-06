@@ -59,12 +59,12 @@ class PPO:
             batch=True,
         )
 
-    def run_episode(self, env):
+    def run_episode(self, env, device):
 
         values = []
         log_probs = []
         for _ in range(self.config.steps_per_trajectory):
-            state = env.get_current_state()
+            state = env.get_current_state().to(device)
             with torch.no_grad():
                 log_alphas = self.actor(state)
                 value = self.critic(state)
@@ -73,12 +73,14 @@ class PPO:
             reward, next_state, terminal_state = env.step(action)
             log_prob = policy.log_prob(action)
             self.buffer.add_experience(
-                state, action, reward, next_state, terminal_state
+                state.cpu(),
+                action.cpu(),
+                reward.cpu(),
+                next_state.cpu(),
+                terminal_state.cpu(),
             )
             log_probs.append(log_prob.unsqueeze(1))
             values.append(value)
-        with torch.no_grad():
-            values.append(self.critic(state))
 
         return torch.cat(log_probs, dim=1), torch.cat(values, dim=1).squeeze()
 
@@ -112,7 +114,7 @@ class PPO:
             # )
             env.reset(starting_step)
             self.buffer.reset()
-            old_log_probs, old_values = self.run_episode(env)
+            old_log_probs, old_values = self.run_episode(env, device)
             dataloader = DataLoader(
                 dataset=self.buffer,
                 batch_size=self.config.batch_size,
