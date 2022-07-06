@@ -7,13 +7,11 @@ from src.env.transaction_cost import (
     ConstantTransactionCost,
 )
 from src.models.ppo.ppo import PPOConfig, PPO
-from src.models.networks import RecurrentNetwork, MLP
+from src.models.networks import RecurrentNetwork, MLP, TransformerEncoderModel
 import pandas as pd
 from src.env.portfolio import Portfolio
 import torch
 import numpy as np
-
-from src.models.networks import TransformerEncoderModel
 
 
 M = 365 * 2 * (60 * 24)

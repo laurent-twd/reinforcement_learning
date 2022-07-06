@@ -39,6 +39,7 @@ class Portfolio(Environment):
     def reward(
         self,
         action: torch.Tensor,
+        device,
         reduce_reward: bool = True,
     ) -> float:
         _, current_price, next_price = self.dataset[self.current_step]
@@ -47,6 +48,8 @@ class Portfolio(Environment):
             y = y.unsqueeze(0)
         while len(action.shape) < len(y.shape):
             action = action.unsqueeze(0)
+        y.to(device)
+        self.weights.to(device)
         cash_return = torch.ones(size=(y.shape[0], 1))
         y = torch.cat([cash_return, y], dim=-1)
         mu = self.transaction_cost.get_transaction_factor(action, self.weights)
@@ -60,18 +63,19 @@ class Portfolio(Environment):
             return r
 
     def step(
-        self, action: torch.Tensor, reduce_reward: bool = False
+        self, action: torch.Tensor, device, reduce_reward: bool = False
     ) -> Tuple[float, torch.Tensor, bool]:
 
-        current_state = self.get_current_state()
-        reward = self.reward(action, reduce_reward)
+        current_state = self.get_current_state().to(device)
+        reward = self.reward(action, device, reduce_reward)
         terminal_state = (self.current_step + 1 >= len(self.dataset)) | (
             self.counter >= (self.steps_per_episode)  # do not add -1 for now
         )
         self.current_step = torch.clip(self.current_step + 1, max=len(self.dataset) - 1)
         self.counter += 1
 
-        new_state = self.get_current_state()
+        new_state = self.get_current_state().to(device)
+        terminal_state.to(device)
         new_state = torch.where(
             terminal_state.unsqueeze(-1).unsqueeze(-1), current_state, new_state
         )
