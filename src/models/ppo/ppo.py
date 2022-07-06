@@ -94,8 +94,6 @@ class PPO:
         self.critic.network.train()
         use_gpu = use_gpu and torch.cuda.is_available()
         device = "cuda" if use_gpu else "cpu"
-        self.actor.network.to(device)
-        self.critic.network.to(device)
 
         env = Portfolio(
             dataset=dataset,
@@ -116,7 +114,9 @@ class PPO:
             # )
             env.reset(starting_step)
             self.buffer.reset()
-            old_log_probs, old_values = self.run_episode(env, device)
+            self.actor.network.to("cpu")
+            self.critic.network.to("cpu")
+            old_log_probs, old_values = self.run_episode(env, "cpu")
             dataloader = DataLoader(
                 dataset=self.buffer,
                 batch_size=self.config.batch_size,
@@ -124,6 +124,8 @@ class PPO:
                 collate_fn=self.buffer.collate,
             )
 
+            self.actor.network.to(device)
+            self.critic.network.to(device)
             for epoch in range(self.config.n_epochs):
                 for idx, batch in iter(dataloader):
                     (
