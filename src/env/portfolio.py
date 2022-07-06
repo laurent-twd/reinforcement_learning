@@ -48,10 +48,11 @@ class Portfolio(Environment):
             y = y.unsqueeze(0)
         while len(action.shape) < len(y.shape):
             action = action.unsqueeze(0)
-        y.to(device)
-        self.weights.to(device)
         cash_return = torch.ones(size=(y.shape[0], 1))
         y = torch.cat([cash_return, y], dim=-1)
+
+        y.to(device)
+        self.weights.to(device)
         mu = self.transaction_cost.get_transaction_factor(action, self.weights)
         self.weights = (
             action * y / (action * y).sum(dim=-1, keepdim=True)
