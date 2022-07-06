@@ -13,6 +13,9 @@ from src.env.portfolio import Portfolio
 import torch
 import numpy as np
 
+from src.models.networks import TransformerEncoderModel
+
+
 M = 365 * 2 * (60 * 24)
 path_to_data = "/Users/laurentthanwerdas/Downloads/CryptoCurrency Historical Prices/BTC Historical Prices/Binance_BTCUSDT_1hour.csv"
 df = pd.read_csv(path_to_data).tail(M)
@@ -21,16 +24,16 @@ columns = [c.lower() for c in columns]
 df = df.dropna(subset=columns)
 
 
-generated_prices = np.cos(0.1 * np.arange(0, df.shape[0] + 1)) + 10.0
-prices = generated_prices[:-1][:, np.newaxis]
-norm = generated_prices[1:]
+# generated_prices = np.cos(0.1 * np.arange(0, df.shape[0] + 1)) + 10.0
+# prices = generated_prices[:-1][:, np.newaxis]
+# norm = generated_prices[1:]
 
 
-# norm = df[columns[-1]].values
-# prices = df[columns[:3]].values
+norm = df[columns[-1]].values
+prices = df[columns[:3]].values
 
 n_assets = 1
-n_channels = 1
+n_channels = 3
 window = 30
 
 dataset = TradingDataset(
@@ -40,24 +43,28 @@ cost = ConstantTransactionCost(TransactionCostConfig(c_b=0.0, c_s=0.0))
 
 actor = TradingAgent(
     AgentConfig(n_assets=n_assets),
-    network=MLP(n_assets * n_channels * window, 32, n_assets + 1, 3),
+    network=TransformerEncoderModel(
+        input_dim=n_channels, output_dim=2, d_model=32, dim_feedforward=128
+    ),
 )
 
 critic = TradingCritic(
     AgentConfig(n_assets=n_assets),
-    network=MLP(n_assets * n_channels * window, 32, 1, 3),
+    network=TransformerEncoderModel(
+        input_dim=n_channels, output_dim=1, d_model=32, dim_feedforward=128
+    ),
 )
 
 ppo = PPO(
     config=PPOConfig(
-        lr_actor=1e-4,
-        lr_critic=1e-4,
+        lr_actor=1e-5,
+        lr_critic=1e-5,
         c_1=1e-3,
         c_2=0.0,
         steps_per_trajectory=90,
-        n_trajectories=2048,
+        n_trajectories=32,
         n_epochs=5,
-        batch_size=1024,
+        batch_size=16,
         lambda_=0.0,
         gamma=0.99,
         normalize_advantage=False,
@@ -70,7 +77,7 @@ ppo = PPO(
 ppo.fit(dataset, n_episodes=100)
 
 
-batch_size = 1
+batch_size = 64
 
 env = Portfolio(
     dataset=dataset,
@@ -81,7 +88,7 @@ env = Portfolio(
 
 starting_step = torch.randint(0, len(dataset) - ppo.config.steps_per_trajectory, [1])
 
-starting_step = starting_step + torch.zeros(512).long()
+starting_step = starting_step + torch.zeros(batch_size).long()
 
 env.reset(starting_step)
 ppo.buffer.reset()

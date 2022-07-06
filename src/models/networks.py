@@ -1,4 +1,30 @@
 import torch
+from torch.nn import TransformerEncoder, TransformerEncoderLayer, Linear
+
+
+class TransformerEncoderModel(torch.nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        d_model: int = 128,
+        nhead: int = 2,
+        dim_feedforward: int = 512,
+        n_layers: int = 2,
+    ):
+        super().__init__()
+        self.input_layer = Linear(in_features=input_dim, out_features=d_model)
+        encoder_layer = TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward
+        )
+        self.encoder = TransformerEncoder(encoder_layer, n_layers)
+        self.output_layer = Linear(in_features=d_model, out_features=output_dim)
+
+    def __call__(self, x):
+        y = self.input_layer(x)
+        y = self.encoder(y)
+        y = y.mean(dim=1)
+        return self.output_layer(y)
 
 
 class MLP(torch.nn.Module):
