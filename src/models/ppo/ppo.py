@@ -70,7 +70,7 @@ class PPO:
                 value = self.critic(state)
             policy = torch.distributions.Dirichlet(concentration=log_alphas.exp())
             action = policy.sample()
-            reward, next_state, terminal_state = env.step(action)
+            reward, next_state, terminal_state = env.step(action, device=device)
             log_prob = policy.log_prob(action)
             self.buffer.add_experience(
                 state.cpu(),
