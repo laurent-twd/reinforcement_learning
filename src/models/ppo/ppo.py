@@ -140,8 +140,6 @@ class PPO:
                         _,
                     ) = astuple(batch.to(device))
                     count += 1
-                    if count % self.config.accumulate_grad_batches == 0:
-                        self.optimizer.zero_grad()
 
                     log_alphas = self.actor(states.flatten(0, 1)).reshape(
                         states.shape[0], states.shape[1], -1
@@ -205,17 +203,18 @@ class PPO:
                         self.critic.network.parameters(), self.config.max_grad_norm
                     )
 
-                    self.optimizer.step()
+                    if count % self.config.accumulate_grad_batches == 0:
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+                        step = self.optimizer.state[
+                            self.optimizer.param_groups[0]["params"][-1]
+                        ]["step"]
+                        self.writer.add_scalar("Loss", loss.detach().cpu(), step)
+                        self.writer.add_scalar(
+                            "Actor Loss", actor_loss.detach().cpu(), step
+                        )
+                        self.writer.add_scalar(
+                            "Critic Loss", value_loss.detach().cpu(), step
+                        )
 
-                    step = self.optimizer.state[
-                        self.optimizer.param_groups[0]["params"][-1]
-                    ]["step"]
-                    self.writer.add_scalar("Loss", loss.detach().cpu(), step)
-                    self.writer.add_scalar(
-                        "Actor Loss", actor_loss.detach().cpu(), step
-                    )
-                    self.writer.add_scalar(
-                        "Critic Loss", value_loss.detach().cpu(), step
-                    )
-
-                    progbar.set_description(f"Loss: {loss.detach().cpu():e}")
+                        progbar.set_description(f"Loss: {loss.detach().cpu():e}")
